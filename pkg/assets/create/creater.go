@@ -102,7 +102,7 @@ func create(manifests map[string]*unstructured.Unstructured, client dynamic.Inte
 	sort.Strings(sortedManifestPaths)
 
 	// Record all errors for the given manifest path (so when we report errors, users can see what manifest failed).
-	errs := map[string][]error{}
+	errs := map[string]error{}
 
 	// In case we fail to find a rest-mapping for the resource, force to fetch the updated discovery on next run.
 	reloadDiscovery := false
@@ -111,7 +111,7 @@ func create(manifests map[string]*unstructured.Unstructured, client dynamic.Inte
 		gvk := manifests[path].GetObjectKind().GroupVersionKind()
 		mappings, err := mapper.RESTMapping(gvk.GroupKind(), gvk.Version)
 		if err != nil {
-			errs[path] = append(errs[path], fmt.Errorf("unable to get REST mapping: %v", err))
+			errs[path] = fmt.Errorf("unable to get REST mapping: %v", err)
 			reloadDiscovery = true
 			continue
 		}
@@ -130,7 +130,7 @@ func create(manifests map[string]*unstructured.Unstructured, client dynamic.Inte
 		}
 
 		if err != nil {
-			errs[path] = append(errs[path], fmt.Errorf("failed to create: %v", err))
+			errs[path] = fmt.Errorf("failed to create: %v", err)
 			continue
 		}
 
@@ -141,7 +141,7 @@ func create(manifests map[string]*unstructured.Unstructured, client dynamic.Inte
 	return formatErrors(errs), reloadDiscovery
 }
 
-func formatErrors(errors map[string][]error) error {
+func formatErrors(errors map[string]error) error {
 	if len(errors) == 0 {
 		return nil
 	}
@@ -153,9 +153,7 @@ func formatErrors(errors map[string][]error) error {
 	sort.Strings(keys)
 
 	for _, k := range keys {
-		for _, err := range errors[k] {
-			aggregatedErrMessages = append(aggregatedErrMessages, fmt.Sprintf("%q: %v", k, err))
-		}
+		aggregatedErrMessages = append(aggregatedErrMessages, fmt.Sprintf("%q: %v", k, errors[k]))
 	}
 	return fmt.Errorf("failed to create some manifests:\n%s\n", strings.Join(aggregatedErrMessages, "\n"))
 }
@@ -171,21 +169,21 @@ func load(assetsDir string, options CreateOptions) (map[string]*unstructured.Uns
 		return nil, err
 	}
 
-	errs := map[string][]error{}
+	errs := map[string]error{}
 	for manifestPath, manifestBytes := range manifestsBytesMap {
 		manifestJSON, err := yaml.YAMLToJSON(manifestBytes)
 		if err != nil {
-			errs[manifestPath] = append(errs[manifestPath], fmt.Errorf("unable to convert asset %q from YAML to JSON: %v", manifestPath, err))
+			errs[manifestPath] = fmt.Errorf("unable to convert asset %q from YAML to JSON: %v", manifestPath, err)
 			continue
 		}
 		manifestObj, err := runtime.Decode(unstructured.UnstructuredJSONScheme, manifestJSON)
 		if err != nil {
-			errs[manifestPath] = append(errs[manifestPath], fmt.Errorf("unable to decode asset %q: %v", manifestPath, err))
+			errs[manifestPath] = fmt.Errorf("unable to decode asset %q: %v", manifestPath, err)
 			continue
 		}
 		manifestUnstructured, ok := manifestObj.(*unstructured.Unstructured)
 		if !ok {
-			errs[manifestPath] = append(errs[manifestPath], fmt.Errorf("unable to convert asset %q to unstructed", manifestPath))
+			errs[manifestPath] = fmt.Errorf("unable to convert asset %q to unstructed", manifestPath)
 			continue
 		}
 		manifests[manifestPath] = manifestUnstructured
